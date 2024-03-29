@@ -1,7 +1,11 @@
 import csv
 import os
+import re
 import pandas as pd
 from icecream import ic
+
+
+merge1 = pd.DataFrame()
 
 
 def remove_vendors(df, rest):
@@ -13,18 +17,27 @@ def remove_vendors(df, rest):
     return df
 
 
+def extract_bin_numbers(row, regex):
+    for col in row.index:
+        if isinstance(row[col], str) and re.match(regex, row[col]):
+            ic(row[col])
+            return row[col]
+    return None
+
+
 def main():
     store_list = ["atlanta", "boca", "ch47", "chno", "myrtle"]
-
     os.system("clear")
 
-    merge1 = pd.DataFrame()
     for store in store_list:
         menuitems = pd.read_csv(
-            "./linkcheck/wine_menu_items.csv", sep=",", usecols=["Name", "Recipe"]
+            "./linkcheck/wine_menu_items.csv",
+            sep=",",
+            usecols=["Name", "Recipe"],
+            dtype=str,
         )
         bin_numbers = pd.read_csv(
-            "../pos_data_exports/output/wine_bin_numbers.csv", sep=","
+            "../pos_data_exports/output/wine_bin_numbers.csv", sep=",", dtype=str
         )
         ingredients = pd.read_csv(
             "./linkcheck/wine_ingredients.csv", sep=",", usecols=["Item", "Recipe"]
@@ -48,17 +61,32 @@ def main():
 
         merge0 = pd.merge(menuitems, bin_numbers, on="Toast", how="left")
         merge1 = pd.merge(merge0, ingredients, on="Recipe", how="left")
+        merge1["ATL"] = merge1.apply(
+            extract_bin_numbers, axis=1, args=(r"[A]\d{3,4}$",)
+        )
+        merge1["BOCA"] = merge1.apply(
+            extract_bin_numbers, axis=1, args=(r"[B]\d{3,4}$",)
+        )
+        merge1["MB"] = merge1.apply(extract_bin_numbers, axis=1, args=(r"[M]\d{3,4}$",))
+        merge1["CH47"] = merge1.apply(
+            extract_bin_numbers, axis=1, args=(r"[G]\d{3,4}$",)
+        )
+        merge1["NOLA"] = merge1.apply(
+            extract_bin_numbers, axis=1, args=(r"[L]\d{3,4}$",)
+        )
+        merge1.drop(columns=["Bin0", "Bin1", "Bin2", "Bin3", "Bin4"], inplace=True)
         col_order = [
             "Toast",
-            "Bin0",
-            "Bin1",
-            "Bin2",
-            "Bin3",
-            "Bin4",
+            "ATL",
+            "BOCA",
+            "MB",
+            "CH47",
+            "NOLA",
             "Recipe",
             "Purchase Item",
         ]
         merge1 = merge1[col_order]
+
         in_toast = pd.merge(merge1, stockCount, on="Purchase Item", how="left")
         in_stockcount = pd.merge(merge1, stockCount, on="Purchase Item", how="right")
         in_both = pd.merge(merge1, stockCount, on="Purchase Item", how="inner")
@@ -76,12 +104,13 @@ def main():
 
         # linkCheck = pd.merge(merge2, vendorItems, on='Purchase Item', how='left')
         #        linkCheck.dropna(subset=['Toast'], thresh=1, inplace=True)
-        ic(merge1.tail(25))
 
         with pd.ExcelWriter(f"./output/{store}_WineCheck.xlsx") as writer:  # pylint: disable=abstract-class-instantiated
             in_toast.to_excel(writer, sheet_name="In Toast")
             in_stockcount.to_excel(writer, sheet_name="In StockCount")
             in_both.to_excel(writer, sheet_name="In Both")
+
+    ic(merge1)
 
     with pd.ExcelWriter("./output/WineCheck.xlsx") as writer:  # pylint: disable=abstract-class-instantiated
         merge1.sort_values(by="Toast", inplace=True)
