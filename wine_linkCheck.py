@@ -9,7 +9,9 @@ merge1 = pd.DataFrame()
 
 
 def remove_vendors(df, rest):
-    # Removes unused vendors from the dataframes
+    """
+    Remove vendors that are not used by the restaurant
+    """
     file = open("./linkcheck/" + rest + "_vendors.txt")
     vendor_list = file.read().split("\n")
     file.close
